@@ -9,14 +9,11 @@
 <title>Поймай котёнка 🐱</title>
 <style>
   * { -webkit-tap-highlight-color: transparent; }
-
   html, body {
-    margin: 0;
-    padding: 0;
+    margin: 0; padding: 0;
     overscroll-behavior: none;
     touch-action: manipulation;
   }
-
   body {
     display: flex;
     flex-direction: column;
@@ -32,7 +29,6 @@
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
     box-sizing: border-box;
   }
-
   h1 {
     color: #ff6b9d;
     margin: 6px 0;
@@ -41,7 +37,6 @@
     text-align: center;
     line-height: 1.1;
   }
-
   #hud {
     display: flex;
     gap: clamp(8px, 2.5vw, 18px);
@@ -142,7 +137,6 @@
     touch-action: none;
     max-width: 96vw;
   }
-
   canvas {
     background: #fffaf0;
     border-radius: clamp(12px, 3vw, 20px);
@@ -171,7 +165,6 @@
     overflow-y: auto;
   }
   #shop { z-index: 11; justify-content: flex-start; }
-
   #memo.hidden, #shop.hidden { display: none; }
 
   #memo h2, #shop h2 {
@@ -255,6 +248,7 @@
     gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: center;
     max-width: 96vw;
     padding: 0 4px;
   }
@@ -279,6 +273,14 @@
   button.btn.shop { background: #ff9800; box-shadow: 0 4px 10px rgba(255,152,0,0.4); }
   .hidden { display: none !important; }
 
+  #volSlider {
+    width: clamp(60px, 18vw, 90px);
+    accent-color: #ff6b9d;
+    cursor: pointer;
+    vertical-align: middle;
+    touch-action: manipulation;
+  }
+
   .comboFlash { animation: comboPulse 0.5s ease-out; }
   @keyframes comboPulse {
     0% { filter: brightness(1); }
@@ -286,7 +288,6 @@
     100% { filter: brightness(1); }
   }
 
-  /* Ландшафт на мобильных — компактнее по вертикали */
   @media (max-height: 560px) and (orientation: landscape) {
     h1 { font-size: 16px; margin: 2px 0; }
     #hud { font-size: 11px; gap: 6px; margin-bottom: 2px; }
@@ -295,9 +296,8 @@
     #stats { display: none; }
     #buttons { margin-top: 4px; gap: 4px; }
     button.btn { padding: 5px 12px; font-size: 12px; }
+    #volSlider { width: 55px; }
   }
-
-  /* Очень маленькие экраны */
   @media (max-width: 360px) {
     h1 { font-size: 15px; }
     #hud { font-size: 11px; gap: 5px; }
@@ -331,7 +331,6 @@
       <div class="memo-sub">Прочитай перед началом!</div>
       <ul>
         <li><span class="emoji">👆</span> <b>Тапай по котятам</b> — за каждого дают очки</li>
-        <li><span class="emoji">⭐</span> <b>Редкие котята дают больше очков</b></li>
         <li><span class="emoji">🔥</span> <b>Лови подряд — растёт КОМБО</b> (×2, ×3, ×4...)</li>
         <li class="gold"><span class="emoji">🌟</span> <b>Золотой котёнок</b> даёт ×5 очков + время!</li>
         <li><span class="emoji">🛒</span> Трать <b>очки</b> в Магазине на бонусы</li>
@@ -351,10 +350,11 @@
 
   <div id="buttons">
     <button id="nextBtn" class="btn secondary hidden">Дальше ⏭</button>
-    <button id="shopOpenBtn" class="btn shop hidden">Магазин 🛒</button>
+    <button id="shopOpenBtn" class="btn shop">Магазин 🛒</button>
     <button id="pauseBtn" class="btn pause">Пауза ⏸</button>
     <button id="memoToggle" class="btn memo">Памятка 📖</button>
     <button id="soundBtn" class="btn sound">🔊 Звук вкл</button>
+    <input type="range" id="volSlider" min="0" max="1" step="0.05" value="0.9" title="Громкость">
     <button id="restart" class="btn">С начала 🔄</button>
   </div>
 
@@ -376,6 +376,7 @@ const memoToggle = document.getElementById('memoToggle');
 const memoEl = document.getElementById('memo');
 const memoBtn = document.getElementById('memoBtn');
 const soundBtn = document.getElementById('soundBtn');
+const volSlider = document.getElementById('volSlider');
 const shopEl = document.getElementById('shop');
 const shopGrid = document.getElementById('shopGrid');
 const shopCoinsEl = document.getElementById('shopCoins');
@@ -387,15 +388,12 @@ const canvasWrap = document.getElementById('canvasWrap');
 //  МОБИЛЬНАЯ АДАПТАЦИЯ CANVAS
 // ============================================================
 const BASE_W = 500;
-const BASE_H = 420;
+const BASE_H = 520;
 let canvasScale = 1;
 
 function resizeCanvas() {
-  // Доступная ширина и высота с учётом интерфейса
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-
-  // Резервируем место под HUD, кнопки и прочее
   const reservedH = Math.max(220, vh * 0.42);
   const availW = vw * 0.94;
   const availH = Math.max(200, vh - reservedH);
@@ -405,22 +403,16 @@ function resizeCanvas() {
 
   const cssW = Math.round(BASE_W * scale);
   const cssH = Math.round(BASE_H * scale);
-
   canvas.style.width = cssW + 'px';
   canvas.style.height = cssH + 'px';
 
-  // Retina / высокий DPI
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
   canvas.width = Math.round(BASE_W * dpr);
   canvas.height = Math.round(BASE_H * dpr);
-
-  // Масштабируем контекст, чтобы игровая логика работала в базовых 500x420
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // canvasWrap подстраиваем под размер canvas
   canvasWrap.style.width = cssW + 'px';
   canvasWrap.style.height = cssH + 'px';
-
   draw();
 }
 
@@ -431,16 +423,27 @@ if (window.visualViewport) {
 }
 
 // ============================================================
-//  ВИБРАЦИЯ (мобильная)
+//  ВИБРАЦИЯ
 // ============================================================
 function vibrate(pattern) {
-  if (navigator.vibrate && soundEnabled !== undefined) {
+  if (navigator.vibrate) {
     try { navigator.vibrate(pattern); } catch (e) {}
   }
 }
 
 // ============================================================
-//  МАГАЗИН
+//  ГРОМКОСТЬ
+// ============================================================
+let meowVolume = 0.9;
+let purrVolume = 0.4;
+
+volSlider.addEventListener('input', (e) => {
+  meowVolume = parseFloat(e.target.value);
+  purrVolume = meowVolume * 0.45;
+});
+
+// ============================================================
+//  МАГАЗИН — товары
 // ============================================================
 const SHOP_ITEMS = [
   { id: 'time5', name: '+5 секунд', emoji: '⏱️', desc: 'Добавляет 5 секунд к таймеру', price: 100,
@@ -504,7 +507,8 @@ function startPurring() {
   const mix = audioCtx.createGain(); mix.gain.value = 1.0;
   osc.connect(g1).connect(mix); osc2.connect(g2).connect(mix); osc3.connect(g3).connect(mix);
   const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0, t); gain.gain.linearRampToValueAtTime(0.28, t + 0.4);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(purrVolume, t + 0.4);
   mix.connect(filter).connect(f1).connect(gain).connect(audioCtx.destination);
   osc.start(t); osc2.start(t); osc3.start(t); lfo.start(t); lfo2.start(t);
   purringNode = osc; purringNode._osc2 = osc2; purringNode._osc3 = osc3;
@@ -529,51 +533,93 @@ function stopPurring() {
 function playMeow(breedId) {
   if (!soundEnabled || !audioCtx) return;
   const t = audioCtx.currentTime;
+
   const params = {
-    british: { f0Start: 380, f0Peak: 600, f0End: 340, dur: 0.55, gain: 0.55, f1: 720, f2: 1100, f3: 2300, vib: 5.5 },
-    siamese: { f0Start: 500, f0Peak: 880, f0End: 450, dur: 0.75, gain: 0.58, f1: 880, f2: 1350, f3: 2700, vib: 7.5 },
-    maine:   { f0Start: 220, f0Peak: 400, f0End: 210, dur: 0.7, gain: 0.60, f1: 520, f2: 850, f3: 1800, vib: 4.5 },
-    persian: { f0Start: 350, f0Peak: 560, f0End: 330, dur: 0.6, gain: 0.52, f1: 680, f2: 1050, f3: 2100, vib: 5 },
-    sphynx:  { f0Start: 460, f0Peak: 740, f0End: 420, dur: 0.5, gain: 0.55, f1: 820, f2: 1280, f3: 2500, vib: 6.5 },
-    bengal:  { f0Start: 420, f0Peak: 700, f0End: 400, dur: 0.65, gain: 0.58, f1: 780, f2: 1220, f3: 2450, vib: 6 },
-    tuxedo:  { f0Start: 380, f0Peak: 620, f0End: 350, dur: 0.58, gain: 0.55, f1: 730, f2: 1130, f3: 2350, vib: 5.5 }
+    british: { f0Start: 380, f0Peak: 600, f0End: 340, dur: 0.55, f1: 720,  f2: 1100, f3: 2300, vib: 5.5 },
+    siamese: { f0Start: 500, f0Peak: 880, f0End: 450, dur: 0.75, f1: 880,  f2: 1350, f3: 2700, vib: 7.5 },
+    maine:   { f0Start: 220, f0Peak: 400, f0End: 210, dur: 0.7,  f1: 520,  f2: 850,  f3: 1800, vib: 4.5 },
+    persian: { f0Start: 350, f0Peak: 560, f0End: 330, dur: 0.6,  f1: 680,  f2: 1050, f3: 2100, vib: 5 },
+    sphynx:  { f0Start: 460, f0Peak: 740, f0End: 420, dur: 0.5,  f1: 820,  f2: 1280, f3: 2500, vib: 6.5 },
+    bengal:  { f0Start: 420, f0Peak: 700, f0End: 400, dur: 0.65, f1: 780,  f2: 1220, f3: 2450, vib: 6 },
+    tuxedo:  { f0Start: 380, f0Peak: 620, f0End: 350, dur: 0.58, f1: 730,  f2: 1130, f3: 2350, vib: 5.5 }
   };
   const p = params[breedId] || params.british;
-  const voice = audioCtx.createOscillator(); voice.type = 'sawtooth';
+
+  const voice = audioCtx.createOscillator();
+  voice.type = 'sawtooth';
   voice.frequency.setValueAtTime(p.f0Start, t);
   voice.frequency.exponentialRampToValueAtTime(p.f0Peak, t + p.dur * 0.25);
   voice.frequency.setValueAtTime(p.f0Peak, t + p.dur * 0.4);
   voice.frequency.exponentialRampToValueAtTime(p.f0Peak * 0.92, t + p.dur * 0.55);
   voice.frequency.exponentialRampToValueAtTime(p.f0End, t + p.dur);
-  const vibrato = audioCtx.createOscillator(); const vibratoGain = audioCtx.createGain();
-  vibrato.type = 'sine'; vibrato.frequency.value = p.vib;
+
+  const vibrato = audioCtx.createOscillator();
+  const vibratoGain = audioCtx.createGain();
+  vibrato.type = 'sine';
+  vibrato.frequency.value = p.vib;
   vibratoGain.gain.setValueAtTime(0, t);
   vibratoGain.gain.linearRampToValueAtTime(15, t + p.dur * 0.3);
   vibratoGain.gain.linearRampToValueAtTime(25, t + p.dur * 0.7);
   vibratoGain.gain.linearRampToValueAtTime(0, t + p.dur);
   vibrato.connect(vibratoGain).connect(voice.frequency);
   vibrato.start(t); vibrato.stop(t + p.dur);
+
   const f1 = audioCtx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = p.f1; f1.Q.value = 10;
   const f2 = audioCtx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = p.f2; f2.Q.value = 12;
   const f3 = audioCtx.createBiquadFilter(); f3.type = 'bandpass'; f3.frequency.value = p.f3; f3.Q.value = 14;
+
   const g1 = audioCtx.createGain(); g1.gain.value = 1.0;
   const g2 = audioCtx.createGain(); g2.gain.value = 0.65;
   const g3 = audioCtx.createGain(); g3.gain.value = 0.35;
   const mixFormants = audioCtx.createGain(); mixFormants.gain.value = 1.0;
+
   voice.connect(f1).connect(g1).connect(mixFormants);
   voice.connect(f2).connect(g2).connect(mixFormants);
   voice.connect(f3).connect(g3).connect(mixFormants);
+
+  const compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = -12;
+  compressor.knee.value = 20;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
+
   const masterGain = audioCtx.createGain();
   masterGain.gain.setValueAtTime(0, t);
-  masterGain.gain.linearRampToValueAtTime(p.gain * 0.5, t + 0.05);
-  masterGain.gain.linearRampToValueAtTime(p.gain, t + p.dur * 0.3);
-  masterGain.gain.linearRampToValueAtTime(p.gain * 0.9, t + p.dur * 0.6);
-  masterGain.gain.linearRampToValueAtTime(p.gain * 0.5, t + p.dur * 0.85);
+  masterGain.gain.linearRampToValueAtTime(meowVolume * 0.6, t + 0.05);
+  masterGain.gain.linearRampToValueAtTime(meowVolume, t + p.dur * 0.3);
+  masterGain.gain.linearRampToValueAtTime(meowVolume * 0.95, t + p.dur * 0.6);
+  masterGain.gain.linearRampToValueAtTime(meowVolume * 0.6, t + p.dur * 0.85);
   masterGain.gain.linearRampToValueAtTime(0, t + p.dur);
+
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * p.dur, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * 0.2;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuffer;
+  const noiseFilter = audioCtx.createBiquadFilter();
+  noiseFilter.type = 'bandpass';
+  noiseFilter.frequency.value = p.f2 * 1.15;
+  noiseFilter.Q.value = 6;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(0, t);
+  noiseGain.gain.linearRampToValueAtTime(0.08, t + 0.1);
+  noiseGain.gain.linearRampToValueAtTime(0.05, t + p.dur * 0.5);
+  noiseGain.gain.linearRampToValueAtTime(0, t + p.dur * 0.85);
+  noise.connect(noiseFilter).connect(noiseGain).connect(masterGain);
+
   const finalFilter = audioCtx.createBiquadFilter();
-  finalFilter.type = 'lowpass'; finalFilter.frequency.value = 3500; finalFilter.Q.value = 0.5;
-  mixFormants.connect(masterGain).connect(finalFilter).connect(audioCtx.destination);
+  finalFilter.type = 'lowpass';
+  finalFilter.frequency.value = 4500;
+  finalFilter.Q.value = 0.5;
+
+  mixFormants.connect(masterGain)
+             .connect(compressor)
+             .connect(finalFilter)
+             .connect(audioCtx.destination);
+
   voice.start(t); voice.stop(t + p.dur + 0.05);
+  noise.start(t); noise.stop(t + p.dur + 0.05);
 }
 
 function playVictory() {
@@ -590,8 +636,8 @@ function playVictory() {
     vib.type = 'sine'; vib.frequency.value = 6; vibGain.gain.value = 8;
     vib.connect(vibGain).connect(osc.frequency);
     gain.gain.setValueAtTime(0, t + time);
-    gain.gain.linearRampToValueAtTime(0.28, t + time + 0.02);
-    gain.gain.linearRampToValueAtTime(0.22, t + time + dur * 0.6);
+    gain.gain.linearRampToValueAtTime(0.35, t + time + 0.02);
+    gain.gain.linearRampToValueAtTime(0.28, t + time + dur * 0.6);
     gain.gain.linearRampToValueAtTime(0, t + time + dur);
     osc.connect(gain).connect(audioCtx.destination);
     osc.start(t + time); osc.stop(t + time + dur + 0.05);
@@ -602,7 +648,7 @@ function playVictory() {
     osc.type = 'sine'; osc.frequency.value = freq;
     const startT = t + 0.5 + i * 0.05;
     gain.gain.setValueAtTime(0, startT);
-    gain.gain.linearRampToValueAtTime(0.25 - i*0.07, startT + 0.02);
+    gain.gain.linearRampToValueAtTime(0.3 - i*0.08, startT + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, startT + 0.7);
     osc.connect(gain).connect(audioCtx.destination);
     osc.start(startT); osc.stop(startT + 0.75);
@@ -616,7 +662,7 @@ function playPurchase() {
     const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
     osc.type = 'triangle'; osc.frequency.value = freq;
     gain.gain.setValueAtTime(0, t + i * 0.05);
-    gain.gain.linearRampToValueAtTime(0.2, t + i * 0.05 + 0.02);
+    gain.gain.linearRampToValueAtTime(0.25, t + i * 0.05 + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.2);
     osc.connect(gain).connect(audioCtx.destination);
     osc.start(t + i * 0.05); osc.stop(t + i * 0.05 + 0.25);
@@ -818,8 +864,39 @@ function buyItem(item) {
   renderShop();
 }
 
-function openShop() { shopEl.classList.remove('hidden'); renderShop(); }
-function closeShop() { shopEl.classList.add('hidden'); }
+function openShop() {
+  if (running && !paused && !betweenLevels) {
+    paused = true;
+    clearTimeout(spawnTimeout);
+    stopPurring();
+    pauseBtn.textContent = 'Продолжить ▶';
+    pauseBtn.style.background = '#66bb6a';
+    draw();
+  }
+  shopEl.classList.remove('hidden');
+  renderShop();
+}
+
+function closeShop() {
+  shopEl.classList.add('hidden');
+  if (running && paused && !betweenLevels) {
+    paused = false;
+    pauseBtn.textContent = 'Пауза ⏸';
+    pauseBtn.style.background = '';
+    const lvl = LEVELS[currentLevel];
+    if (!kitten) {
+      spawnKitten();
+    } else {
+      kitten.born = Date.now();
+      spawnTimeout = setTimeout(() => {
+        if (kitten && Date.now() - kitten.born >= lvl.showTime - 100) {
+          stopPurring(); kitten = null; draw();
+          setTimeout(spawnKitten, Math.max(200, lvl.spawnDelay - lvl.showTime));
+        }
+      }, lvl.showTime);
+    }
+  }
+}
 
 // ============================================================
 //  ОТРИСОВКА КОТЁНКА
@@ -1109,7 +1186,7 @@ function draw() {
     ctx.globalAlpha = 1;
   }
 
-  if (paused && running) {
+  if (paused && running && shopEl.classList.contains('hidden') && memoEl.classList.contains('hidden')) {
     ctx.fillStyle = 'rgba(255,255,255,0.75)';
     ctx.fillRect(0, 0, BASE_W, BASE_H);
     ctx.fillStyle = '#a97cff';
@@ -1205,14 +1282,13 @@ function showPointsFloat(x, y, points, rarity, extra) {
 }
 
 // ============================================================
-//  ОБРАБОТКА НАЖАТИЙ (тач + мышь + стилус)
+//  ОБРАБОТКА НАЖАТИЙ
 // ============================================================
-let pointerHandled = false;
-
 function handleCanvasTap(clientX, clientY) {
   initAudio();
   if (!running || paused || betweenLevels) return;
   if (!shopEl.classList.contains('hidden')) return;
+  if (!memoEl.classList.contains('hidden')) return;
 
   const rect = canvas.getBoundingClientRect();
   const mx = (clientX - rect.left) / canvasScale;
@@ -1287,15 +1363,12 @@ function handleCanvasTap(clientX, clientY) {
   }
 }
 
-// pointerdown — работает и на тач, и на мышь, мгновенный отклик
 canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   e.preventDefault();
-  pointerHandled = true;
   handleCanvasTap(e.clientX, e.clientY);
 }, { passive: false });
 
-// Fallback для старых браузеров без Pointer Events
 if (!window.PointerEvent) {
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
@@ -1310,7 +1383,6 @@ if (!window.PointerEvent) {
   });
 }
 
-// Запрет двойного тапа / зума
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 document.addEventListener('dblclick', (e) => e.preventDefault());
 
@@ -1348,8 +1420,6 @@ function showLevelCompleteScreen() {
   });
 
   if (soundEnabled && audioCtx) setTimeout(() => playVictory(), 300);
-
-  shopOpenBtn.classList.remove('hidden');
 
   if (!isLast) {
     nextBtn.textContent = `Дальше → Уровень ${currentLevel + 2} ⏭`;
@@ -1421,7 +1491,6 @@ function nextLevel() {
     currentLevel++;
     betweenLevels = false;
     nextBtn.classList.add('hidden');
-    shopOpenBtn.classList.add('hidden');
     pauseBtn.disabled = false;
     pauseBtn.textContent = 'Пауза ⏸';
     pauseBtn.style.background = '';
@@ -1440,7 +1509,6 @@ function startLevel() {
   levelEl.textContent = lvl.n;
   timeEl.textContent = timeLeft;
   updateProgress();
-  closeShop();
 
   timerId = setInterval(() => {
     if (paused) return;
@@ -1489,7 +1557,7 @@ function showTimeoutScreen() {
 function restartGame() {
   clearInterval(timerId); clearTimeout(spawnTimeout);
   if (comboTimer) clearTimeout(comboTimer);
-  stopPurring(); stopSpeaking(); closeShop();
+  stopPurring(); stopSpeaking(); shopEl.classList.add('hidden');
   running = false; paused = false; betweenLevels = false;
   kitten = null; penaltyFloaters = []; pointsFloaters = []; sparkleParticles = [];
   combo = 0; maxCombo = 0;
@@ -1501,7 +1569,6 @@ function restartGame() {
   currentLevel = 0; totalScore = 0; totalPoints = 0; levelCaught = 0;
   scoreEl.textContent = 0; pointsEl.textContent = 0;
   nextBtn.classList.add('hidden');
-  shopOpenBtn.classList.add('hidden');
   pauseBtn.disabled = false;
   pauseBtn.textContent = 'Пауза ⏸';
   pauseBtn.style.background = '';
@@ -1521,7 +1588,30 @@ function showMemo() {
   }
 }
 
-function hideMemo() { memoEl.classList.add('hidden'); initAudio(); }
+function hideMemo() {
+  memoEl.classList.add('hidden');
+  initAudio();
+
+  // Если игра на паузе (стартовый экран или открытая памятка) — сразу возобновляем
+  if (running && paused && !betweenLevels) {
+    paused = false;
+    pauseBtn.textContent = 'Пауза ⏸';
+    pauseBtn.style.background = '';
+    const lvl = LEVELS[currentLevel];
+    if (!kitten) {
+      spawnKitten();
+    } else {
+      kitten.born = Date.now();
+      spawnTimeout = setTimeout(() => {
+        if (kitten && Date.now() - kitten.born >= lvl.showTime - 100) {
+          stopPurring(); kitten = null; draw();
+          setTimeout(spawnKitten, Math.max(200, lvl.spawnDelay - lvl.showTime));
+        }
+      }, lvl.showTime);
+    }
+    requestAnimationFrame(animate);
+  }
+}
 
 memoBtn.addEventListener('click', hideMemo);
 memoToggle.addEventListener('click', showMemo);
@@ -1547,8 +1637,8 @@ shopCloseBtn.addEventListener('click', closeShop);
 pauseBtn.addEventListener('click', () => {
   initAudio();
   if (!running || betweenLevels) return;
-  if (!memoEl.classList.contains('hidden')) hideMemo();
-  if (!shopEl.classList.contains('hidden')) return;
+  if (!memoEl.classList.contains('hidden')) { hideMemo(); return; }
+  if (!shopEl.classList.contains('hidden')) { closeShop(); return; }
 
   paused = !paused;
   vibrate(15);
@@ -1588,8 +1678,8 @@ memoEl.classList.remove('hidden');
 startLevel();
 paused = true;
 clearTimeout(spawnTimeout);
-pauseBtn.textContent = 'Продолжить ▶';
-pauseBtn.style.background = '#66bb6a';
+pauseBtn.textContent = 'Пауза ⏸';
+pauseBtn.style.background = '';
 
 document.addEventListener('pointerdown', () => initAudio(), { once: true });
 </script>
